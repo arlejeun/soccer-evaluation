@@ -466,6 +466,20 @@ function renderCategories() {
 // ===== RATINGS STATE =====
 var ratings = {};
 
+function setDefaultRatings() {
+    ratings = {};
+    categories.forEach(function(cat, catIdx) {
+        cat.skills.forEach(function(_, skillIdx) {
+            ratings[catIdx + '-' + skillIdx] = 2; // Developing
+        });
+    });
+    // Highlight the buttons
+    document.querySelectorAll('.rating-btn[data-rating="2"]').forEach(function(btn) {
+        btn.classList.add('selected-2');
+    });
+    updateSummary();
+}
+
 function setRating(catIdx, skillIdx, rating, btn) {
     var key = catIdx + '-' + skillIdx;
     ratings[key] = rating;
@@ -724,10 +738,9 @@ function clearFormSilent() {
     document.getElementById('player-name').value = '';
     document.getElementById('player-position').value = '';
     document.getElementById('parent-code').value = '';
-    ratings = {};
     document.querySelectorAll('.rating-btn').forEach(function(b) { b.className = 'rating-btn'; });
     document.querySelectorAll('.notes-input').forEach(function(el) { el.value = ''; });
-    updateSummary();
+    setDefaultRatings();
 }
 
 // ===== TOAST =====
@@ -741,7 +754,7 @@ function showToast(msg) {
 // ===== INIT =====
 renderTeamSelect();
 renderCategories();
-updateSummary();
+setDefaultRatings();
 loadAllAssessments();
 </script>
 </body>
