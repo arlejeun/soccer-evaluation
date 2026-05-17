@@ -228,6 +228,7 @@
 <script>
 // ===== CONFIG =====
 const PIN_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'; // "1234"
+const SHEETS_API = 'https://script.google.com/macros/s/AKfycbye--OX9-1dnxglPYbX7ubsoIjatUg7y3uppN4clRZjl2zwa2FAiaJAW-Y_kZgLMA0P/exec';
 
 // ===== SKILL CATEGORIES (U10 appropriate) =====
 var categories = [
@@ -308,6 +309,8 @@ var categories = [
 var ratingLabels = ['Needs work', 'Developing', 'On track', 'Strong'];
 
 // ===== TEAM MANAGEMENT =====
+var allAssessments = []; // in-memory cache
+
 function getTeams() {
     var teams = JSON.parse(localStorage.getItem('teams') || '[]');
     if (teams.length === 0) {
@@ -364,10 +367,13 @@ function renameTeam() {
     if (idx === -1) return;
     teams[idx] = name.trim();
     localStorage.setItem('teams', JSON.stringify(teams));
-    // Update assessments
-    var saved = JSON.parse(localStorage.getItem('assessments') || '[]');
-    saved.forEach(function(a) { if (a.team === active) a.team = name.trim(); });
-    localStorage.setItem('assessments', JSON.stringify(saved));
+    // Update assessments in memory and on server
+    allAssessments.forEach(function(a) {
+        if (a.team === active) {
+            a.team = name.trim();
+            sheetsPost({ action: 'save', id: a.id, team: a.team, playerName: a.playerName, position: a.position, date: a.date, ratings: a.ratings, notes: a.notes });
+        }
+    });
     setActiveTeam(name.trim());
     renderTeamSelect();
     renderHistory();
@@ -379,12 +385,13 @@ function deleteTeam() {
     var teams = getTeams();
     if (teams.length <= 1) { showToast('Cannot delete the only team'); return; }
     if (!confirm('Delete team "' + active + '" and all its assessments?')) return;
+    // Delete from server
+    allAssessments.filter(function(a) { return a.team === active; }).forEach(function(a) {
+        sheetsPost({ action: 'delete', id: a.id });
+    });
+    allAssessments = allAssessments.filter(function(a) { return a.team !== active; });
     teams = teams.filter(function(t) { return t !== active; });
     localStorage.setItem('teams', JSON.stringify(teams));
-    // Remove assessments for this team
-    var saved = JSON.parse(localStorage.getItem('assessments') || '[]');
-    saved = saved.filter(function(a) { return a.team !== active; });
-    localStorage.setItem('assessments', JSON.stringify(saved));
     setActiveTeam(teams[0]);
     renderTeamSelect();
     clearFormSilent();
@@ -469,6 +476,45 @@ function updateSummary() {
     });
 }
 
+// ===== GOOGLE SHEETS API =====
+function sheetsGet(params) {
+    var url = SHEETS_API + '?' + Object.keys(params).map(function(k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    return fetch(url).then(function(r) { return r.json(); });
+}
+
+function sheetsPost(body) {
+    return fetch(SHEETS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); });
+}
+
+function loadAllAssessments() {
+    showToast('Loading...');
+    return sheetsGet({ action: 'getAll' }).then(function(res) {
+        if (res.success) {
+            allAssessments = res.data;
+            // Sync teams from data
+            var teamSet = {};
+            allAssessments.forEach(function(a) { if (a.team) teamSet[a.team] = true; });
+            var teams = getTeams();
+            Object.keys(teamSet).forEach(function(t) {
+                if (teams.indexOf(t) === -1) teams.push(t);
+            });
+            localStorage.setItem('teams', JSON.stringify(teams));
+            renderTeamSelect();
+            renderHistory();
+        }
+    }).catch(function(err) {
+        showToast('Offline — using local data');
+        allAssessments = JSON.parse(localStorage.getItem('assessments') || '[]');
+        renderHistory();
+    });
+}
+
 // ===== SAVE / LOAD =====
 function getFormData() {
     return {
@@ -484,11 +530,33 @@ function getFormData() {
 function saveAssessment() {
     var data = getFormData();
     if (!data.playerName.trim()) { showToast('Please enter a player name'); return; }
-    var saved = JSON.parse(localStorage.getItem('assessments') || '[]');
-    saved.unshift(data);
-    localStorage.setItem('assessments', JSON.stringify(saved));
-    showToast('Assessment saved to ' + data.team);
-    renderHistory();
+    showToast('Saving...');
+    sheetsPost({
+        action: 'save',
+        team: data.team,
+        playerName: data.playerName,
+        position: data.position,
+        date: data.date,
+        ratings: data.ratings,
+        notes: data.notes
+    }).then(function(res) {
+        if (res.success) {
+            data.id = res.id;
+            allAssessments.unshift(data);
+            // Also save locally as backup
+            localStorage.setItem('assessments', JSON.stringify(allAssessments));
+            showToast('Saved to ' + data.team + ' \u2714');
+            renderHistory();
+        } else {
+            showToast('Save failed — try again');
+        }
+    }).catch(function() {
+        // Offline fallback
+        allAssessments.unshift(data);
+        localStorage.setItem('assessments', JSON.stringify(allAssessments));
+        showToast('Saved locally (offline)');
+        renderHistory();
+    });
 }
 
 function loadAssessment(index) {
@@ -498,10 +566,12 @@ function loadAssessment(index) {
     document.getElementById('player-name').value = data.playerName;
     document.getElementById('player-position').value = data.position;
     ratings = JSON.parse(JSON.stringify(data.ratings));
-    data.notes.forEach(function(note, i) {
-        var el = document.getElementById('notes-' + i);
-        if (el) el.value = note;
-    });
+    if (data.notes) {
+        data.notes.forEach(function(note, i) {
+            var el = document.getElementById('notes-' + i);
+            if (el) el.value = note;
+        });
+    }
     document.querySelectorAll('.rating-btn').forEach(function(btn) { btn.className = 'rating-btn'; });
     Object.keys(ratings).forEach(function(key) {
         var parts = key.split('-');
@@ -515,25 +585,21 @@ function loadAssessment(index) {
 function deleteAssessment(index, e) {
     e.stopPropagation();
     if (!confirm('Delete this assessment?')) return;
-    var team = getActiveTeam();
-    var saved = JSON.parse(localStorage.getItem('assessments') || '[]');
-    // Find the actual index in the full array
-    var teamCount = 0;
-    for (var i = 0; i < saved.length; i++) {
-        if (saved[i].team === team) {
-            if (teamCount === index) { saved.splice(i, 1); break; }
-            teamCount++;
-        }
+    var saved = getTeamAssessments();
+    var item = saved[index];
+    if (!item) return;
+    if (item.id) {
+        sheetsPost({ action: 'delete', id: item.id });
     }
-    localStorage.setItem('assessments', JSON.stringify(saved));
+    allAssessments = allAssessments.filter(function(a) { return a !== item && a.id !== item.id; });
+    localStorage.setItem('assessments', JSON.stringify(allAssessments));
     renderHistory();
     showToast('Deleted');
 }
 
 function getTeamAssessments() {
     var team = getActiveTeam();
-    var saved = JSON.parse(localStorage.getItem('assessments') || '[]');
-    return saved.filter(function(a) { return a.team === team; });
+    return allAssessments.filter(function(a) { return a.team === team; });
 }
 
 function renderHistory() {
@@ -683,7 +749,7 @@ function showToast(msg) {
 renderTeamSelect();
 renderCategories();
 updateSummary();
-renderHistory();
+loadAllAssessments();
 </script>
 </body>
 </html>
