@@ -96,6 +96,16 @@ function doPost(e) {
     rowData['date'] = body.date || new Date().toISOString();
     rowData['ratings'] = JSON.stringify(body.ratings || {});
     rowData['notes'] = JSON.stringify(body.notes || []);
+    if (body.summerPlan !== undefined) {
+      rowData['summerPlan'] = body.summerPlan;
+    }
+
+    // Ensure summerPlan column exists if we have plan data
+    if (body.summerPlan !== undefined && headers.indexOf('summerPlan') === -1) {
+      var lastCol = headers.length + 1;
+      sheet.getRange(1, lastCol).setValue('summerPlan');
+      headers.push('summerPlan');
+    }
 
     var row = headers.map(function(h) { return rowData[h] !== undefined ? rowData[h] : ''; });
 
@@ -113,6 +123,39 @@ function doPost(e) {
     }
 
     return ContentService.createTextOutput(JSON.stringify({ success: true, id: id }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'savePlan') {
+    var parentCode = body.parentCode || '';
+    var summerPlan = body.summerPlan || '';
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return h.toString().trim(); });
+    
+    // Ensure summerPlan column exists
+    var spIdx = headers.indexOf('summerPlan');
+    if (spIdx === -1) {
+      var lastCol = headers.length + 1;
+      sheet.getRange(1, lastCol).setValue('summerPlan');
+      headers.push('summerPlan');
+      spIdx = headers.length - 1;
+    }
+
+    // Find row by parentCode and update summerPlan
+    var pcIdx = headers.indexOf('parentCode');
+    var data = sheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 1; i < data.length; i++) {
+      if (pcIdx >= 0 && data[i][pcIdx] && data[i][pcIdx].toString().trim().toUpperCase() === parentCode.toUpperCase()) {
+        sheet.getRange(i + 1, spIdx + 1).setValue(summerPlan);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Player not found' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ success: true }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 

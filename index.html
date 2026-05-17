@@ -650,7 +650,9 @@ function deleteAssessment(index, e) {
 
 function getTeamAssessments() {
     var team = getActiveTeam();
-    return allAssessments.filter(function(a) { return a.team === team; });
+    return allAssessments.filter(function(a) {
+        return a.team === team && !(a.id && a.id.toString().indexOf('plan-') === 0);
+    });
 }
 
 function renderHistory() {
@@ -732,13 +734,13 @@ function generateSummerPlan() {
     document.getElementById('plan-player-info').textContent = data.playerName + ' \u2014 ' + (data.position || 'No position') + ' \u2014 ' + data.team;
     document.getElementById('plan-modal').style.display = 'block';
 
-    // Try to load existing plan first
+    // Try to load existing plan from the player's assessment
     if (data.parentCode) {
         document.getElementById('plan-content').value = 'Loading existing plan...';
-        sheetsGet({ action: 'parentLookup', parentCode: 'plan-' + data.parentCode })
+        sheetsGet({ action: 'parentLookup', parentCode: data.parentCode })
             .then(function(res) {
-                if (res.success && res.data && res.data.notes && res.data.notes[0]) {
-                    document.getElementById('plan-content').value = res.data.notes[0];
+                if (res.success && res.data && res.data.summerPlan) {
+                    document.getElementById('plan-content').value = res.data.summerPlan;
                 } else {
                     document.getElementById('plan-content').value = buildPlan(data);
                 }
@@ -850,21 +852,15 @@ function approvePlan() {
 
     showToast('Saving plan...');
     sheetsPost({
-        action: 'save',
-        id: 'plan-' + data.parentCode.toLowerCase(),
-        team: data.team,
-        playerName: data.playerName,
-        position: data.position,
-        parentCode: 'plan-' + data.parentCode,
-        date: new Date().toISOString(),
-        ratings: {},
-        notes: [planText]
+        action: 'savePlan',
+        parentCode: data.parentCode,
+        summerPlan: planText
     }).then(function(res) {
         if (res.success) {
             showToast('Summer plan approved & shared!');
             closePlanModal();
         } else {
-            showToast('Failed to save plan');
+            showToast('Save the assessment first, then approve the plan');
         }
     }).catch(function() {
         showToast('Error saving plan — try again');
