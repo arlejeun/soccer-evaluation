@@ -121,10 +121,6 @@
         <h2>&#128202; Summary</h2>
         <div id="report-summary"></div>
     </div>
-    <div class="improvement-section" id="improvement-section">
-        <h2>&#127919; Focus Areas for Improvement</h2>
-        <div id="report-improvements"></div>
-    </div>
     <div id="plan-section" style="display:none;background:#1a2a1a;border:1px solid #2a4a2a;border-radius:12px;padding:1.5rem;margin-top:1.5rem">
         <h2 style="font-size:1.1rem;margin-bottom:1rem;color:#4a8">&#128197; Summer Development Plan</h2>
         <pre id="plan-text" style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#ddd;line-height:1.6"></pre>
@@ -224,28 +220,7 @@ function showReport(data) {
         summaryContainer.innerHTML += '<div class="summary-bar"><span class="summary-label">' + cat.icon + ' ' + cat.name + '</span><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div><span class="bar-value">' + (avg > 0 ? avg.toFixed(1) : '\u2014') + '</span></div>';
     });
 
-    // Improvement areas
-    var weakSkills = [];
-    categories.forEach(function(cat, catIdx) {
-        cat.skills.forEach(function(skill, skillIdx) {
-            var key = catIdx + '-' + skillIdx;
-            var r = ratingsObj[key];
-            if (r && r <= 2) {
-                weakSkills.push({ skill: skill, category: cat.name, rating: r });
-            }
-        });
-    });
-    weakSkills.sort(function(a, b) { return a.rating - b.rating; });
-    var impContainer = document.getElementById('report-improvements');
-    var impSection = document.getElementById('improvement-section');
-    if (weakSkills.length > 0) {
-        impSection.style.display = 'block';
-        impContainer.innerHTML = weakSkills.slice(0, 5).map(function(s) {
-            return '<div class="improvement-item">\u2022 <strong>' + s.skill + '</strong> (' + s.category + ') \u2014 ' + ratingLabels[s.rating - 1] + '</div>';
-        }).join('');
-    } else {
-        impSection.style.display = 'none';
-    }
+    // Improvement areas — removed, covered by summer plan
 }
 </script>
 </body>
