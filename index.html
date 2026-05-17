@@ -229,6 +229,8 @@
 // ===== CONFIG =====
 const PIN_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'; // "1234"
 const SHEETS_API = 'https://script.google.com/macros/s/AKfycbye--OX9-1dnxglPYbX7ubsoIjatUg7y3uppN4clRZjl2zwa2FAiaJAW-Y_kZgLMA0P/exec';
+const WRITE_SALT = 'soccer-eval-write'; // salt used to derive write token from PIN
+var writeToken = ''; // set after PIN auth
 
 // ===== SKILL CATEGORIES (U10 appropriate) =====
 var categories = [
@@ -408,13 +410,24 @@ async function hashPin(pin) {
     return hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
 
+async function generateWriteToken(pin) {
+    var encoder = new TextEncoder();
+    var data = encoder.encode(pin + ':' + WRITE_SALT);
+    var hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    var hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+
 async function checkPin() {
     var pin = document.getElementById('pin-input').value;
     var hash = await hashPin(pin);
     if (hash === PIN_HASH) {
+        writeToken = await generateWriteToken(pin);
+        sessionStorage.setItem('authenticated', 'true');
+        sessionStorage.setItem('writeToken', writeToken);
         document.getElementById('pin-screen').style.display = 'none';
         document.getElementById('app').style.display = 'block';
-        sessionStorage.setItem('authenticated', 'true');
+        loadAllAssessments();
     } else {
         document.getElementById('pin-error').style.display = 'block';
         document.getElementById('pin-input').value = '';
@@ -426,6 +439,7 @@ document.getElementById('pin-input').addEventListener('keydown', function(e) {
 });
 
 if (sessionStorage.getItem('authenticated') === 'true') {
+    writeToken = sessionStorage.getItem('writeToken') || '';
     document.getElementById('pin-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
 }
@@ -485,6 +499,7 @@ function sheetsGet(params) {
 }
 
 function sheetsPost(body) {
+    body.token = writeToken;
     return fetch(SHEETS_API, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
