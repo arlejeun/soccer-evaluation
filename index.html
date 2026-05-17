@@ -64,7 +64,7 @@
         .team-btn:hover { background: #4a4f4a; }
         .team-btn.active { background: #4a8; color: #fff; }
         /* PLAYER INFO */
-        .player-info { display: grid; grid-template-columns: 1fr auto; gap: 1rem; margin-bottom: 2rem; }
+        .player-info { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; margin-bottom: 2rem; }
         .field-label { font-size: 0.8rem; color: #999; margin-bottom: 0.4rem; }
         .field-input {
             background: #2a2f2a; border: 1px solid #3a3f3a; border-radius: 8px;
@@ -201,6 +201,10 @@
                 <option value="Midfielder">Midfielder</option>
                 <option value="Forward">Forward</option>
             </select>
+        </div>
+        <div>
+            <div class="field-label">Parent code</div>
+            <input type="text" class="field-input" id="parent-code" placeholder="e.g. TEO2025" style="text-transform:uppercase">
         </div>
     </div>
 
@@ -535,6 +539,7 @@ function getFormData() {
     return {
         playerName: document.getElementById('player-name').value,
         position: document.getElementById('player-position').value,
+        parentCode: document.getElementById('parent-code').value.trim().toUpperCase(),
         team: getActiveTeam(),
         ratings: JSON.parse(JSON.stringify(ratings)),
         notes: categories.map(function(_, i) { return document.getElementById('notes-' + i).value; }),
@@ -551,6 +556,7 @@ function saveAssessment() {
         team: data.team,
         playerName: data.playerName,
         position: data.position,
+        parentCode: data.parentCode,
         date: data.date,
         ratings: data.ratings,
         notes: data.notes
@@ -580,6 +586,7 @@ function loadAssessment(index) {
     if (!data) return;
     document.getElementById('player-name').value = data.playerName;
     document.getElementById('player-position').value = data.position;
+    document.getElementById('parent-code').value = data.parentCode || '';
     ratings = JSON.parse(JSON.stringify(data.ratings));
     if (data.notes) {
         data.notes.forEach(function(note, i) {
@@ -633,54 +640,23 @@ function renderHistory() {
 }
 
 // ===== EXPORT =====
-function generateCode(length) {
-    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    var code = '';
-    for (var i = 0; i < length; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-}
-
 function shareWithParent() {
     var data = getFormData();
     if (!data.playerName.trim()) { showToast('Please enter a player name first'); return; }
+    if (!data.parentCode) { showToast('Set a parent code first (e.g. TEO2025)'); return; }
 
-    // Build a self-contained payload for the parent page
-    var code = generateCode(6);
-    var payload = {
-        code: code,
-        playerName: data.playerName,
-        position: data.position,
-        team: data.team,
-        date: data.date,
-        categories: categories.map(function(cat, catIdx) {
-            return {
-                name: cat.name,
-                icon: cat.icon,
-                notes: data.notes[catIdx] || '',
-                skills: cat.skills.map(function(skill, skillIdx) {
-                    var key = catIdx + '-' + skillIdx;
-                    return { name: skill, rating: ratings[key] || 0 };
-                })
-            };
-        })
-    };
-
-    var json = JSON.stringify(payload);
-    var encoded = btoa(encodeURIComponent(json));
     var baseUrl = window.location.href.replace(/\/[^\/]*$/, '/');
-    var parentUrl = baseUrl + 'parent.html#' + encoded;
+    var parentUrl = baseUrl + 'parent.html';
 
-    // Copy to clipboard
     var shareText = 'Player Assessment for ' + data.playerName + '\n';
-    shareText += 'Access code: ' + code + '\n';
+    shareText += 'Access code: ' + data.parentCode + '\n';
     shareText += 'Link: ' + parentUrl + '\n';
+    shareText += '\nEnter the access code on the page to view the report.';
 
     navigator.clipboard.writeText(shareText).then(function() {
-        showToast('Parent link + code copied!');
+        showToast('Parent info copied! Code: ' + data.parentCode);
     }).catch(function() {
-        prompt('Copy this link and send to parent.\nAccess code: ' + code, parentUrl);
+        prompt('Send this to the parent:\nAccess code: ' + data.parentCode, parentUrl);
     });
 }
 
@@ -746,6 +722,7 @@ function clearForm() {
 function clearFormSilent() {
     document.getElementById('player-name').value = '';
     document.getElementById('player-position').value = '';
+    document.getElementById('parent-code').value = '';
     ratings = {};
     document.querySelectorAll('.rating-btn').forEach(function(b) { b.className = 'rating-btn'; });
     document.querySelectorAll('.notes-input').forEach(function(el) { el.value = ''; });

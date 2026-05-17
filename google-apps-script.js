@@ -3,22 +3,40 @@
 // in your Google Sheet, then deploy as a NEW version of the web app.
 // ============================================================
 
-// WRITE SECRET — must match the one generated from your PIN on the client.
-// This is a SHA-256 hash of your PIN + a salt. Only someone who knows the PIN
-// can generate this token. Change this if you change your PIN.
-// Default: SHA-256("1234:soccer-eval-write") 
+// WRITE TOKEN — SHA-256("1234:soccer-eval-write")
 var WRITE_TOKEN = '2b42e19e7ba32b70ad55b64896f15d2880af066fa6193844cb38c4c7e52ea2e0';
 
-// Returns all assessments as JSON (public read — no auth needed)
 function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Assessments');
-  if (!sheet) {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet('Assessments');
-    sheet.appendRow(['id', 'team', 'playerName', 'position', 'date', 'ratings', 'notes']);
-  }
-
+  var sheet = getOrCreateSheet();
   var action = e.parameter.action || 'getAll';
   var team = e.parameter.team || '';
+  var parentCode = e.parameter.parentCode || '';
+
+  // Parent lookup — returns latest assessment for a given parent code
+  if (action === 'parentLookup' && parentCode) {
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var matches = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = {};
+      for (var j = 0; j < headers.length; j++) {
+        row[headers[j]] = data[i][j];
+      }
+      if (row.parentCode && row.parentCode.toUpperCase() === parentCode.toUpperCase()) {
+        try { row.ratings = JSON.parse(row.ratings); } catch(err) { row.ratings = {}; }
+        try { row.notes = JSON.parse(row.notes); } catch(err) { row.notes = []; }
+        matches.push(row);
+      }
+    }
+    if (matches.length === 0) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Not found' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    // Return the most recent one
+    matches.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+    return ContentService.createTextOutput(JSON.stringify({ success: true, data: matches[0] }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
   if (action === 'getAll') {
     var data = sheet.getDataRange().getValues();
@@ -39,36 +57,20 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  if (action === 'getTeams') {
-    var data = sheet.getDataRange().getValues();
-    var teams = {};
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][1]) teams[data[i][1]] = true;
-    }
-    return ContentService.createTextOutput(JSON.stringify({ success: true, teams: Object.keys(teams) }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
   return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// Saves or deletes an assessment (requires write token)
 function doPost(e) {
   var body = JSON.parse(e.postData.contents);
 
-  // ===== AUTH CHECK =====
+  // AUTH CHECK
   if (!body.token || body.token !== WRITE_TOKEN) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unauthorized' }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Assessments');
-  if (!sheet) {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet('Assessments');
-    sheet.appendRow(['id', 'team', 'playerName', 'position', 'date', 'ratings', 'notes']);
-  }
-
+  var sheet = getOrCreateSheet();
   var action = body.action || 'save';
 
   if (action === 'save') {
@@ -78,6 +80,7 @@ function doPost(e) {
       body.team || '',
       body.playerName || '',
       body.position || '',
+      body.parentCode || '',
       body.date || new Date().toISOString(),
       JSON.stringify(body.ratings || {}),
       JSON.stringify(body.notes || [])
@@ -115,4 +118,13 @@ function doPost(e) {
 
   return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getOrCreateSheet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Assessments');
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet('Assessments');
+    sheet.appendRow(['id', 'team', 'playerName', 'position', 'parentCode', 'date', 'ratings', 'notes']);
+  }
+  return sheet;
 }
