@@ -729,10 +729,25 @@ function generateSummerPlan() {
     var data = getFormData();
     if (!data.playerName.trim()) { showToast('Please enter a player name first'); return; }
 
-    var plan = buildPlan(data);
     document.getElementById('plan-player-info').textContent = data.playerName + ' \u2014 ' + (data.position || 'No position') + ' \u2014 ' + data.team;
-    document.getElementById('plan-content').value = plan;
     document.getElementById('plan-modal').style.display = 'block';
+
+    // Try to load existing plan first
+    if (data.parentCode) {
+        document.getElementById('plan-content').value = 'Loading existing plan...';
+        sheetsGet({ action: 'parentLookup', parentCode: 'plan-' + data.parentCode })
+            .then(function(res) {
+                if (res.success && res.data && res.data.notes && res.data.notes[0]) {
+                    document.getElementById('plan-content').value = res.data.notes[0];
+                } else {
+                    document.getElementById('plan-content').value = buildPlan(data);
+                }
+            }).catch(function() {
+                document.getElementById('plan-content').value = buildPlan(data);
+            });
+    } else {
+        document.getElementById('plan-content').value = buildPlan(data);
+    }
 }
 
 function regeneratePlan() {
