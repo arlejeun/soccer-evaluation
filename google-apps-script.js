@@ -15,14 +15,14 @@ function doGet(e) {
   // Parent lookup — returns latest assessment for a given parent code
   if (action === 'parentLookup' && parentCode) {
     var data = sheet.getDataRange().getValues();
-    var headers = data[0];
+    var headers = data[0].map(function(h) { return h.toString().trim(); });
     var matches = [];
     for (var i = 1; i < data.length; i++) {
       var row = {};
       for (var j = 0; j < headers.length; j++) {
         row[headers[j]] = data[i][j];
       }
-      if (row.parentCode && row.parentCode.toUpperCase() === parentCode.toUpperCase()) {
+      if (row.parentCode && row.parentCode.toString().trim().toUpperCase() === parentCode.toUpperCase()) {
         try { row.ratings = JSON.parse(row.ratings); } catch(err) { row.ratings = {}; }
         try { row.notes = JSON.parse(row.notes); } catch(err) { row.notes = []; }
         matches.push(row);
@@ -40,7 +40,7 @@ function doGet(e) {
 
   if (action === 'getAll') {
     var data = sheet.getDataRange().getValues();
-    var headers = data[0];
+    var headers = data[0].map(function(h) { return h.toString().trim(); });
     var rows = [];
     for (var i = 1; i < data.length; i++) {
       var row = {};
@@ -75,16 +75,29 @@ function doPost(e) {
 
   if (action === 'save') {
     var id = body.id || Utilities.getUuid();
-    var row = [
-      id,
-      body.team || '',
-      body.playerName || '',
-      body.position || '',
-      body.parentCode || '',
-      body.date || new Date().toISOString(),
-      JSON.stringify(body.ratings || {}),
-      JSON.stringify(body.notes || [])
-    ];
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return h.toString().trim(); });
+    
+    // Ensure parentCode column exists
+    var pcIdx = headers.indexOf('parentCode');
+    if (pcIdx === -1) {
+      var lastCol = headers.length + 1;
+      sheet.getRange(1, lastCol).setValue('parentCode');
+      headers.push('parentCode');
+      pcIdx = headers.length - 1;
+    }
+
+    // Build row based on actual header order
+    var rowData = {};
+    rowData['id'] = id;
+    rowData['team'] = body.team || '';
+    rowData['playerName'] = body.playerName || '';
+    rowData['position'] = body.position || '';
+    rowData['parentCode'] = body.parentCode || '';
+    rowData['date'] = body.date || new Date().toISOString();
+    rowData['ratings'] = JSON.stringify(body.ratings || {});
+    rowData['notes'] = JSON.stringify(body.notes || []);
+
+    var row = headers.map(function(h) { return rowData[h] !== undefined ? rowData[h] : ''; });
 
     var data = sheet.getDataRange().getValues();
     var found = false;
@@ -124,7 +137,7 @@ function getOrCreateSheet() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Assessments');
   if (!sheet) {
     sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet('Assessments');
-    sheet.appendRow(['id', 'team', 'playerName', 'position', 'parentCode', 'date', 'ratings', 'notes']);
+    sheet.appendRow(['id', 'team', 'playerName', 'position', 'date', 'ratings', 'notes', 'parentCode']);
   }
   return sheet;
 }

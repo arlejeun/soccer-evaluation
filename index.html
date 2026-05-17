@@ -217,9 +217,24 @@
 
     <div class="actions">
         <button class="btn btn-primary" onclick="saveAssessment()">&#128190; Save Assessment</button>
+        <button class="btn btn-secondary" onclick="generateSummerPlan()">&#128197; Generate Summer Plan</button>
         <button class="btn btn-secondary" onclick="shareWithParent()">&#128279; Share with Parent</button>
         <button class="btn btn-secondary" onclick="exportAssessment()">&#128203; Export as Text</button>
         <button class="btn btn-danger" onclick="clearForm()">&#128465; Clear Form</button>
+    </div>
+
+    <!-- SUMMER PLAN MODAL -->
+    <div id="plan-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;overflow-y:auto;padding:2rem">
+        <div style="max-width:700px;margin:0 auto;background:#1a1f1a;border:1px solid #3a3f3a;border-radius:12px;padding:2rem">
+            <h2 style="margin-bottom:0.5rem">&#9917; Summer Development Plan</h2>
+            <p id="plan-player-info" style="color:#999;font-size:0.85rem;margin-bottom:1.5rem"></p>
+            <textarea id="plan-content" style="width:100%;min-height:400px;background:#242924;border:1px solid #3a3f3a;border-radius:8px;padding:1rem;font-size:0.85rem;color:#e0e0e0;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
+            <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="approvePlan()">&#9989; Approve &amp; Share with Parent</button>
+                <button class="btn btn-secondary" onclick="regeneratePlan()">&#128260; Regenerate</button>
+                <button class="btn btn-danger" onclick="closePlanModal()">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <div class="history-section" id="history-section">
@@ -652,6 +667,193 @@ function renderHistory() {
         var codeTag = item.parentCode ? '<span style="color:#4a8;font-size:0.7rem;margin-left:0.5rem">Code: ' + item.parentCode + '</span>' : '';
         return '<div class="history-item" onclick="loadAssessment(' + idx + ')"><div><div class="history-meta">' + item.playerName + ' \u2014 ' + (item.position || 'No position') + codeTag + '</div><div class="history-date">' + new Date(item.date).toLocaleDateString() + ' ' + new Date(item.date).toLocaleTimeString() + '</div></div><div class="history-actions"><button class="history-btn delete" onclick="deleteAssessment(' + idx + ', event)">Delete</button></div></div>';
     }).join('');
+}
+
+// ===== SUMMER PLAN =====
+var drillLibrary = {
+    'Dribbling & ball control': [
+        'Cone weave dribbling (10 cones, 1m apart) — 3 sets each foot',
+        'Ball mastery: toe taps, rolls, pull-backs — 5 min daily',
+        'Dribble in a 5x5m box, change direction on whistle',
+        'Shield the ball against a wall or partner for 30 seconds',
+        '1v1 dribble past a cone defender to a finish',
+        'Figure-8 dribbling around two cones — both feet',
+        'Speed dribble: sprint 20m with ball, stop on command'
+    ],
+    'Passing & receiving': [
+        'Wall passing: 50 passes each foot (focus on first touch back)',
+        'Triangle passing with 2 cones and a wall — move after each pass',
+        'Receive and turn: pass to wall, control with back to wall, turn',
+        'Long pass target practice: hit a cone from 15m — 10 attempts each foot',
+        'One-touch passing relay against a wall (30 seconds, count passes)',
+        'Pass and move: pass to wall, sprint to new spot, receive again',
+        'Weak foot only passing session — 5 min'
+    ],
+    'Shooting & finishing': [
+        'Shooting from edge of box: 10 shots each foot, aim for corners',
+        'Power shooting: strike through the ball from 15m — focus on laces',
+        'Finesse finish: side-foot curl into far corner from angle',
+        '1v1 vs cone goalkeeper: dribble and finish under pressure',
+        'Volley practice: toss ball up, strike on the drop',
+        'Quick-fire shooting: 5 balls lined up, shoot one after another',
+        'Weak foot shooting: 20 shots from 10m — track accuracy'
+    ],
+    'Defending': [
+        'Shadow defending: mirror a partner without ball for 1 min',
+        'Jockeying drill: stay goal-side of a dribbler for 30 seconds',
+        '1v1 defending in a 10x10m grid — win the ball back',
+        'Interception game: read the pass and step in front',
+        'Body positioning: practice getting sideways-on to attacker',
+        'Recovery runs: start behind attacker, sprint to get goal-side',
+        'Tackle timing: let attacker push ball, then step in cleanly'
+    ],
+    'Physical & athletic': [
+        'Sprint intervals: 6x 30m sprints with 30s rest',
+        'Agility ladder: 3 different patterns, 5 reps each',
+        'Shuttle runs: 5-10-15-20m and back — 4 sets',
+        'Balance challenge: stand on one foot with ball, 30s each side',
+        'Skipping with high knees — 2x 30m',
+        'Plank hold: 3x 30 seconds with 15s rest',
+        'Endurance jog: 10-15 min at steady pace (with ball if possible)'
+    ],
+    'Attitude & coachability': [
+        'Set a personal goal for each practice session and review after',
+        'Practice a skill you find difficult for 10 min without giving up',
+        'Watch 5 min of a pro player in your position — note one thing to copy',
+        'Encourage a teammate or sibling during a game or practice',
+        'Try something new each session (new move, weak foot, new position)'
+    ]
+};
+
+function generateSummerPlan() {
+    var data = getFormData();
+    if (!data.playerName.trim()) { showToast('Please enter a player name first'); return; }
+
+    var plan = buildPlan(data);
+    document.getElementById('plan-player-info').textContent = data.playerName + ' \u2014 ' + (data.position || 'No position') + ' \u2014 ' + data.team;
+    document.getElementById('plan-content').value = plan;
+    document.getElementById('plan-modal').style.display = 'block';
+}
+
+function regeneratePlan() {
+    var data = getFormData();
+    var plan = buildPlan(data);
+    document.getElementById('plan-content').value = plan;
+    showToast('Plan regenerated');
+}
+
+function closePlanModal() {
+    document.getElementById('plan-modal').style.display = 'none';
+}
+
+function buildPlan(data) {
+    // Identify weak areas (rating 1-2) and strong areas (3-4)
+    var weakAreas = [];
+    var strongAreas = [];
+    categories.forEach(function(cat, catIdx) {
+        var total = 0, count = 0;
+        cat.skills.forEach(function(skill, skillIdx) {
+            var key = catIdx + '-' + skillIdx;
+            var r = ratings[key] || 2;
+            total += r; count++;
+            if (r <= 1) weakAreas.push({ skill: skill, category: cat.name, rating: r });
+            else if (r <= 2) weakAreas.push({ skill: skill, category: cat.name, rating: r });
+        });
+        var avg = count > 0 ? total / count : 2;
+        if (avg >= 3.5) strongAreas.push(cat.name);
+    });
+
+    weakAreas.sort(function(a, b) { return a.rating - b.rating; });
+    var topWeak = weakAreas.slice(0, 8);
+
+    // Group weak skills by category
+    var focusCategories = {};
+    topWeak.forEach(function(w) {
+        if (!focusCategories[w.category]) focusCategories[w.category] = [];
+        focusCategories[w.category].push(w.skill);
+    });
+
+    var plan = '';
+    plan += 'SUMMER DEVELOPMENT PLAN\n';
+    plan += '========================\n';
+    plan += 'Player: ' + data.playerName + '\n';
+    plan += 'Position: ' + (data.position || 'N/A') + '\n';
+    plan += 'Team: ' + data.team + '\n';
+    plan += 'Duration: 8 weeks (3-4 sessions per week, 30-45 min each)\n\n';
+
+    plan += '--- FOCUS AREAS ---\n';
+    Object.keys(focusCategories).forEach(function(cat) {
+        plan += '\n' + cat.toUpperCase() + ':\n';
+        focusCategories[cat].forEach(function(skill) {
+            plan += '  \u2022 ' + skill + '\n';
+        });
+    });
+
+    if (strongAreas.length > 0) {
+        plan += '\n--- STRENGTHS TO MAINTAIN ---\n';
+        strongAreas.forEach(function(s) { plan += '  \u2713 ' + s + '\n'; });
+    }
+
+    plan += '\n\n--- WEEKLY PLAN ---\n\n';
+
+    var focusCatNames = Object.keys(focusCategories);
+    for (var week = 1; week <= 8; week++) {
+        plan += 'WEEK ' + week + ':\n';
+        // Pick 3-4 drills from focus categories, rotating
+        var drillCount = 0;
+        for (var c = 0; c < focusCatNames.length && drillCount < 4; c++) {
+            var catName = focusCatNames[(c + week - 1) % focusCatNames.length];
+            var drills = drillLibrary[catName] || [];
+            if (drills.length > 0) {
+                var drill = drills[(week - 1 + c) % drills.length];
+                plan += '  ' + (drillCount + 1) + '. ' + drill + '\n';
+                drillCount++;
+            }
+        }
+        // Always add one physical drill
+        var physDrills = drillLibrary['Physical & athletic'] || [];
+        if (physDrills.length > 0 && focusCatNames.indexOf('Physical & athletic') === -1) {
+            plan += '  ' + (drillCount + 1) + '. ' + physDrills[(week - 1) % physDrills.length] + '\n';
+        }
+        plan += '\n';
+    }
+
+    plan += '--- TIPS FOR PARENTS ---\n';
+    plan += '  \u2022 Keep sessions fun — stop before the child gets frustrated\n';
+    plan += '  \u2022 Encourage effort over results\n';
+    plan += '  \u2022 Let them play freely with friends too — not everything needs to be structured\n';
+    plan += '  \u2022 Hydrate well and warm up before each session\n';
+    plan += '  \u2022 Celebrate small improvements weekly\n';
+
+    return plan;
+}
+
+function approvePlan() {
+    var data = getFormData();
+    if (!data.parentCode) { showToast('Set a parent code first to share with parent'); return; }
+    var planText = document.getElementById('plan-content').value;
+
+    showToast('Saving plan...');
+    sheetsPost({
+        action: 'save',
+        id: 'plan-' + data.parentCode.toLowerCase(),
+        team: data.team,
+        playerName: data.playerName,
+        position: data.position,
+        parentCode: 'plan-' + data.parentCode,
+        date: new Date().toISOString(),
+        ratings: {},
+        notes: [planText]
+    }).then(function(res) {
+        if (res.success) {
+            showToast('Summer plan approved & shared!');
+            closePlanModal();
+        } else {
+            showToast('Failed to save plan');
+        }
+    }).catch(function() {
+        showToast('Error saving plan — try again');
+    });
 }
 
 // ===== EXPORT =====
