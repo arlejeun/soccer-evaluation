@@ -635,7 +635,8 @@ function renderHistory() {
         return;
     }
     container.innerHTML = saved.map(function(item, idx) {
-        return '<div class="history-item" onclick="loadAssessment(' + idx + ')"><div><div class="history-meta">' + item.playerName + ' \u2014 ' + (item.position || 'No position') + '</div><div class="history-date">' + new Date(item.date).toLocaleDateString() + ' ' + new Date(item.date).toLocaleTimeString() + '</div></div><div class="history-actions"><button class="history-btn delete" onclick="deleteAssessment(' + idx + ', event)">Delete</button></div></div>';
+        var codeTag = item.parentCode ? '<span style="color:#4a8;font-size:0.7rem;margin-left:0.5rem">Code: ' + item.parentCode + '</span>' : '';
+        return '<div class="history-item" onclick="loadAssessment(' + idx + ')"><div><div class="history-meta">' + item.playerName + ' \u2014 ' + (item.position || 'No position') + codeTag + '</div><div class="history-date">' + new Date(item.date).toLocaleDateString() + ' ' + new Date(item.date).toLocaleTimeString() + '</div></div><div class="history-actions"><button class="history-btn delete" onclick="deleteAssessment(' + idx + ', event)">Delete</button></div></div>';
     }).join('');
 }
 
